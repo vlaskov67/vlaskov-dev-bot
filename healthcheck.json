@@ -1,9 +1,0 @@
-{
-  "path": "/api/health",
-  "port": 8080,
-  "protocol": "http",
-  "timeout": 10,
-  "interval": 10,
-  "retries": 5,
-  "initialDelay": 2
-}
