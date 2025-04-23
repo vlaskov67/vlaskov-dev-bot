@@ -1,9 +1,0 @@
-[start]
-cmd = "npm run start"
-
-[healthcheck]
-path = "/api/health"
-port = 8080
-timeout = 10
-interval = 10
-retries = 5
