@@ -7,11 +7,7 @@ const GH_TOKEN = process.env.GITHUB_TOKEN!;
 const GH_OWNER = "vlaskov67";
 const GH_REPO = "vlaskov-store";
 
-/**
- * Health-check endpoint for GET /api/health
- * Returns 200 OK so that platforms (Railway, Kubernetes, etc.)
- * see the container as healthy.
- */
+
 export function GET(req: NextRequest) {
   return NextResponse.json(
     { status: "ok" },
@@ -19,10 +15,6 @@ export function GET(req: NextRequest) {
   );
 }
 
-/**
- * GitHub webhook handler for POST /api/health
- * (you may want to move this to a dedicated webhook route later)
- */
 export async function POST(req: NextRequest) {
   try {
     const event = req.headers.get("x-github-event");
@@ -41,7 +33,6 @@ export async function POST(req: NextRequest) {
 
     console.log("📥 Новая задача:", title);
 
-    // Запрос к OpenAI для генерации PR
     const completion = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -72,14 +63,14 @@ export async function POST(req: NextRequest) {
     const branchName = `auto/issue-${issueNumber}`;
     const octokit = new Octokit({ auth: GH_TOKEN });
 
-    // Получаем SHA текущей main ветки
+
     const mainRef = await octokit.rest.git.getRef({
       owner: GH_OWNER,
       repo: GH_REPO,
       ref: "heads/main",
     });
 
-    // Создаём новую ветку
+ 
     await octokit.rest.git.createRef({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -89,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     const filePath = `generated/issue-${issueNumber}.ts`;
 
-    // Создаём blob с кодом
+ 
     const blob = await octokit.rest.git.createBlob({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -97,7 +88,7 @@ export async function POST(req: NextRequest) {
       encoding: "utf-8",
     });
 
-    // Формируем дерево
+ 
     const tree = await octokit.rest.git.createTree({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -112,7 +103,7 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    // Коммитим изменения
+  
     const commit = await octokit.rest.git.createCommit({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -121,7 +112,7 @@ export async function POST(req: NextRequest) {
       parents: [mainRef.data.object.sha],
     });
 
-    // Обновляем реф новой ветки
+ 
     await octokit.rest.git.updateRef({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -130,7 +121,7 @@ export async function POST(req: NextRequest) {
       force: true,
     });
 
-    // Создаём Pull Request
+
     await octokit.rest.pulls.create({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -149,4 +140,3 @@ export async function POST(req: NextRequest) {
     });
   }
 }
-```
