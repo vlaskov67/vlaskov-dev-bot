@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
 
     console.log("📥 Новая задача:", title);
 
-    // 1. Чтение всех документов из папки docs репозитория сайта
     const octokit = new Octokit({ auth: GH_TOKEN });
     const docsRes = await octokit.rest.repos.getContent({
       owner: GH_OWNER,
@@ -29,7 +28,6 @@ export async function POST(req: NextRequest) {
     });
 
     let docsContent = "";
-
     if (Array.isArray(docsRes.data)) {
       for (const file of docsRes.data) {
         if (file.download_url) {
@@ -39,9 +37,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Правильный промпт для OpenAI
     const prompt = `
-Ты опытный разработчик на Laravel, Livewire и Alpine.js. Используй следующее техническое задание:
+Ты опытный разработчик на Laravel, Livewire и Alpine.js. Используй следующее ТЗ:
 
 ${docsContent}
 
@@ -50,15 +47,20 @@ ${title}
 
 ${body}
 
-Создай нужные файлы и папки для реализации задачи. Ответ дай строго в формате:
+Создай нужные файлы и папки для реализации задачи.
 
-путь/к/файлу.php
----
-содержимое файла
+ВАЖНО: ответ дай СТРОГО в формате JSON:
 
-Следующий файл...
+{
+  "files": [
+    {
+      "path": "путь/к/файлу.php",
+      "content": "полное содержимое файла"
+    }
+  ]
+}
 
-Без лишних комментариев.
+Не добавляй лишних комментариев или текста вне JSON.
 `;
 
     const completion = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -74,9 +76,17 @@ ${body}
       }),
     }).then((res) => res.json());
 
-    const answer = completion.choices?.[0]?.message?.content || "// пусто";
-    const branchName = `auto/issue-${issueNumber}`;
+    const answer = completion.choices?.[0]?.message?.content || "{}";
+    let files;
 
+    try {
+      files = JSON.parse(answer).files;
+    } catch (e) {
+      console.error("❌ Ошибка парсинга JSON:", e, "Ответ OpenAI:", answer);
+      return NextResponse.json({ error: true, message: "Ошибка парсинга JSON от OpenAI" });
+    }
+
+    const branchName = `auto/issue-${issueNumber}`;
     const mainRef = await octokit.rest.git.getRef({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -90,20 +100,17 @@ ${body}
       sha: mainRef.data.object.sha,
     });
 
-    // 3. Создание файлов и коммита
-    const files = answer.split("\n\nСледующий файл...\n\n");
     const treeItems = [];
 
     for (const file of files) {
-      const [filePath, fileContent] = file.split("\n---\n");
       const blob = await octokit.rest.git.createBlob({
         owner: GH_OWNER,
         repo: GH_REPO,
-        content: fileContent,
+        content: file.content,
         encoding: "utf-8",
       });
 
-      treeItems.push({ path: filePath.trim(), mode: "100644", type: "blob", sha: blob.data.sha });
+      treeItems.push({ path: file.path.trim(), mode: "100644", type: "blob", sha: blob.data.sha });
     }
 
     const tree = await octokit.rest.git.createTree({
