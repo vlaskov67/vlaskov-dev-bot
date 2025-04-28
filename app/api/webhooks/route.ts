@@ -22,23 +22,8 @@ export async function POST(req: NextRequest) {
 
     const octokit = new Octokit({ auth: GH_TOKEN });
 
-    // Исправленный компактный сбор документов
-    const docsRes = await octokit.rest.repos.getContent({
-      owner: GH_OWNER,
-      repo: GH_REPO,
-      path: "docs",
-    });
-
-    let docsContent = "";
-    if (Array.isArray(docsRes.data)) {
-      for (const file of docsRes.data) {
-        if (file.download_url) {
-          let content = await fetch(file.download_url).then((res) => res.text());
-          content = content.slice(0, 2000); // первые 2000 символов, чтобы не превысить лимит
-          docsContent += `Файл: ${file.name}\n${content}\n\n---\n\n`;
-        }
-      }
-    }
+    // Временный минимальный тестовый контекст
+    let docsContent = "Это интернет-магазин на Laravel с использованием Livewire и Alpine.js.";
 
     const prompt = `
 Ты опытный разработчик на Laravel, Livewire и Alpine.js. Используй следующее ТЗ:
