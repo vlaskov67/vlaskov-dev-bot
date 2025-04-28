@@ -80,10 +80,14 @@ ${body}
     let files;
 
     try {
-      files = JSON.parse(answer).files;
+      const parsed = JSON.parse(answer);
+      if (!parsed.files || !Array.isArray(parsed.files)) {
+        throw new Error("Ответ OpenAI не содержит массива files");
+      }
+      files = parsed.files;
     } catch (e) {
-      console.error("❌ Ошибка парсинга JSON:", e, "Ответ OpenAI:", answer);
-      return NextResponse.json({ error: true, message: "Ошибка парсинга JSON от OpenAI" });
+      console.error("❌ Ошибка парсинга JSON:", e.message, "Ответ OpenAI:", answer);
+      return NextResponse.json({ error: true, message: "Ошибка парсинга JSON от OpenAI: " + e.message });
     }
 
     const branchName = `auto/issue-${issueNumber}`;
@@ -151,3 +155,4 @@ ${body}
     return NextResponse.json({ error: true, message: (err as Error).message });
   }
 }
+
