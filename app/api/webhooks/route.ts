@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
     console.log("📥 Новая задача:", title);
 
     const octokit = new Octokit({ auth: GH_TOKEN });
+
+    // Исправленный компактный сбор документов
     const docsRes = await octokit.rest.repos.getContent({
       owner: GH_OWNER,
       repo: GH_REPO,
@@ -31,7 +33,8 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(docsRes.data)) {
       for (const file of docsRes.data) {
         if (file.download_url) {
-          const content = await fetch(file.download_url).then((res) => res.text());
+          let content = await fetch(file.download_url).then((res) => res.text());
+          content = content.slice(0, 2000); // первые 2000 символов, чтобы не превысить лимит
           docsContent += `Файл: ${file.name}\n${content}\n\n---\n\n`;
         }
       }
@@ -155,4 +158,3 @@ ${body}
     return NextResponse.json({ error: true, message: (err as Error).message });
   }
 }
-
