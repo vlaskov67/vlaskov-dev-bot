@@ -20,7 +20,47 @@ export async function POST(req: NextRequest) {
 
     console.log("📥 Новая задача:", title);
 
-    // 1. Вызов OpenAI
+    // 1. Чтение всех документов из папки docs репозитория сайта
+    const octokit = new Octokit({ auth: GH_TOKEN });
+    const docsRes = await octokit.rest.repos.getContent({
+      owner: GH_OWNER,
+      repo: GH_REPO,
+      path: "docs",
+    });
+
+    let docsContent = "";
+
+    if (Array.isArray(docsRes.data)) {
+      for (const file of docsRes.data) {
+        if (file.download_url) {
+          const content = await fetch(file.download_url).then((res) => res.text());
+          docsContent += `Файл: ${file.name}\n${content}\n\n---\n\n`;
+        }
+      }
+    }
+
+    // 2. Правильный промпт для OpenAI
+    const prompt = `
+Ты опытный разработчик на Laravel, Livewire и Alpine.js. Используй следующее техническое задание:
+
+${docsContent}
+
+Твоя задача:
+${title}
+
+${body}
+
+Создай нужные файлы и папки для реализации задачи. Ответ дай строго в формате:
+
+путь/к/файлу.php
+---
+содержимое файла
+
+Следующий файл...
+
+Без лишних комментариев.
+`;
+
     const completion = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -29,18 +69,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: "gpt-4o",
-        messages: [
-          { role: "system", content: "Ты помощник, который пишет pull request по описанию из GitHub Issue." },
-          { role: "user", content: `Создай Pull Request в ${GH_REPO} с задачей: ${title}\n\nОписание:\n${body}` },
-        ],
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
       }),
     }).then((res) => res.json());
 
     const answer = completion.choices?.[0]?.message?.content || "// пусто";
     const branchName = `auto/issue-${issueNumber}`;
-
-    // 2. GitHub: создать ветку + commit + PR
-    const octokit = new Octokit({ auth: GH_TOKEN });
 
     const mainRef = await octokit.rest.git.getRef({
       owner: GH_OWNER,
@@ -55,20 +90,27 @@ export async function POST(req: NextRequest) {
       sha: mainRef.data.object.sha,
     });
 
-    const filePath = `generated/issue-${issueNumber}.ts`;
+    // 3. Создание файлов и коммита
+    const files = answer.split("\n\nСледующий файл...\n\n");
+    const treeItems = [];
 
-    const blob = await octokit.rest.git.createBlob({
-      owner: GH_OWNER,
-      repo: GH_REPO,
-      content: answer,
-      encoding: "utf-8",
-    });
+    for (const file of files) {
+      const [filePath, fileContent] = file.split("\n---\n");
+      const blob = await octokit.rest.git.createBlob({
+        owner: GH_OWNER,
+        repo: GH_REPO,
+        content: fileContent,
+        encoding: "utf-8",
+      });
+
+      treeItems.push({ path: filePath.trim(), mode: "100644", type: "blob", sha: blob.data.sha });
+    }
 
     const tree = await octokit.rest.git.createTree({
       owner: GH_OWNER,
       repo: GH_REPO,
       base_tree: mainRef.data.object.sha,
-      tree: [{ path: filePath, mode: "100644", type: "blob", sha: blob.data.sha }],
+      tree: treeItems,
     });
 
     const commit = await octokit.rest.git.createCommit({
@@ -93,7 +135,7 @@ export async function POST(req: NextRequest) {
       title: `auto: resolve #${issueNumber}`,
       head: branchName,
       base: "main",
-      body: "Этот PR сгенерирован фабрикой кода 🤖",
+      body: "🤖 Автоматически созданный PR по вашему issue.",
     });
 
     return NextResponse.json({ status: "PR created" });
@@ -102,5 +144,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: true, message: (err as Error).message });
   }
 }
-
-
